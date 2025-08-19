@@ -7,12 +7,11 @@
 ## Console Commands:
 /sa or /sa show or /sa hide - Show/hide simpleAuras Settings
 
-/sa refresh X - Set refresh rate. (1 to 100 updates per second. Default: 5)
+/sa refresh X - Set refresh rate. (1 to 100 updates per second. Default: 10)
 
 
 ## Settings (/sa)
-<img width="825" height="545" alt="image" src="https://github.com/user-attachments/assets/5eebc24d-6924-4a5b-a83d-b9bde4a03c2f" />
-
+<img width="817" height="539" alt="image" src="https://github.com/user-attachments/assets/6d9809da-b9d6-412b-8ca8-c7e4be413ac2" />
 
 ### Overview
 Shows all existing auras.
@@ -24,7 +23,7 @@ Shows all existing auras.
 ### Aura-Editor
 Shows the currently edited aura only.
 
-Aura Name:
+####Aura/Spellname Name:
 - Name of the aura to track (has to be exactly the same name)
 
 
@@ -40,14 +39,21 @@ Icon/Texture:
 Conditions:
 - Unit: Which unit the aura is on.
 - Type: is it a buff or a debuff.
-- Low Duration Color: If the auracolor should change at or below "lowduration"
-- Low Duration in secs: Allways active, changes durationcolor to red if at or below, also changes color if activated.
+- Low Duration Color*: If the auracolor should change at or below "lowduration"
+- Low Duration in secs*: Allways active, changes durationcolor to red if at or below, also changes color if activated.
+- In/Out of Combat: When aura should be shown
+
+Buff/Debuff:
+- Invert: Activate to show aura if not found.
+- Dual: Mirrors the aura (if xpos = -150, then it will show a mirrored icon/texture at xpos 150).
+
+Cooldown:
+- No CD: Show when not on CD.
+- CD: Show when on CD.
 
 
 Other:
 - [c] / Copy: Copies the aura.
-- Invert: Activate to show aura if conditions aren't met (for example show if a buff is missing - currently only affects if found)
-- Dual: Mirrors the aura (if xpos = -150, then it will show a mirrored icon/texture at xpos 150).
 - Delete: Deletes the aura after confirmation.
 
-\* = Target Duration/Stacks need SuperWoW and CleveRoidMacros' Testbranch!
+\* = Target Duration/Stacks need SuperWoW and CleveRoidMacros' [Testbranch](https://github.com/jrc13245/CleveRoidMacros/tree/test)!

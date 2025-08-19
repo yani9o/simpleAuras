@@ -187,9 +187,9 @@ function SaveAura(id)
   data.auracolor       = ed.auracolor
   data.autodetect      = ed.autoDetect.value
   data.texture         = ed.texturePath:GetText()
-  data.scale            = tonumber(ed.scale:GetText()) or ed.scale:GetText()
-  data.xpos            = tonumber(ed.x:GetText()) or ed.x:GetText()
-  data.ypos            = tonumber(ed.y:GetText()) or ed.y:GetText()
+  data.scale           = tonumber(ed.scale:GetText())
+  data.xpos            = tonumber(ed.x:GetText())
+  data.ypos            = tonumber(ed.y:GetText())
   data.duration        = ed.duration.value
   data.stacks          = ed.stacks.value
   data.lowduration     = ed.lowduration.value
@@ -197,6 +197,8 @@ function SaveAura(id)
   data.lowdurationcolor= ed.lowdurationcolor
   data.unit            = ed.unitButton.text:GetText()
   data.type            = ed.typeButton.text:GetText()
+  data.inCombat        = ed.inCombat.value
+  data.outCombat       = ed.outCombat.value
   data.invert          = ed.invert.value
   data.dual            = ed.dual.value
 
@@ -304,7 +306,7 @@ function sA:EditAura(id)
     ed.autoDetect:SetPoint("LEFT", ed.auracolorpicker, "RIGHT", 73, 0)
     sA:SkinFrame(ed.autoDetect, {0.15,0.15,0.15,1})
     ed.autoDetect:SetScript("OnEnter", function() ed.autoDetect:SetBackdropColor(0.5,0.5,0.5,1) end)
-    ed.autoDetect:SetScript("OnLeave", function() ed.autoDetect:SetBackdropColor(0.2,0.2,0.2,1) end)
+    ed.autoDetect:SetScript("OnLeave", function() ed.autoDetect:SetBackdropColor(0.15,0.15,0.15,1) end)
     ed.autoDetect.checked = ed.autoDetect:CreateTexture(nil, "OVERLAY")
     ed.autoDetect.checked:SetTexture("Interface\\Buttons\\WHITE8x8")
     ed.autoDetect.checked:SetVertexColor(1, 0.8, 0.06, 1)
@@ -406,7 +408,7 @@ function sA:EditAura(id)
     ed.duration:SetPoint("TOPLEFT", ed.scaleLabel, "BOTTOMLEFT", 0, -15)
     sA:SkinFrame(ed.duration, {0.15,0.15,0.15,1})
     ed.duration:SetScript("OnEnter", function() ed.duration:SetBackdropColor(0.5,0.5,0.5,1) end)
-    ed.duration:SetScript("OnLeave", function() ed.duration:SetBackdropColor(0.2,0.2,0.2,1) end)
+    ed.duration:SetScript("OnLeave", function() ed.duration:SetBackdropColor(0.15,0.15,0.15,1) end)
     ed.duration.checked = ed.duration:CreateTexture(nil, "OVERLAY")
     ed.duration.checked:SetTexture("Interface\\Buttons\\WHITE8x8")
     ed.duration.checked:SetVertexColor(1,0.8,0.06,1)
@@ -429,7 +431,7 @@ function sA:EditAura(id)
     ed.stacks:SetPoint("LEFT", ed.durationLabel, "RIGHT", 65, 0)
     sA:SkinFrame(ed.stacks, {0.15,0.15,0.15,1})
     ed.stacks:SetScript("OnEnter", function() ed.stacks:SetBackdropColor(0.5,0.5,0.5,1) end)
-    ed.stacks:SetScript("OnLeave", function() ed.stacks:SetBackdropColor(0.2,0.2,0.2,1) end)
+    ed.stacks:SetScript("OnLeave", function() ed.stacks:SetBackdropColor(0.15,0.15,0.15,1) end)
     ed.stacks.checked = ed.stacks:CreateTexture(nil, "OVERLAY")
     ed.stacks.checked:SetTexture("Interface\\Buttons\\WHITE8x8")
     ed.stacks.checked:SetVertexColor(1,0.8,0.06,1)
@@ -459,58 +461,9 @@ function sA:EditAura(id)
     ed.conditionsLabel:SetJustifyH("CENTER")
     ed.conditionsLabel:SetText("Conditions")
 
-    -- Unit dropdown
-    ed.unitLabel = ed:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-    ed.unitLabel:SetPoint("TOPLEFT", linetwo, "BOTTOMLEFT", 0, -45)
-    ed.unitLabel:SetText("Unit:")
-    ed.unitButton = CreateFrame("Button", nil, ed)
-    ed.unitButton:SetWidth(80)
-    ed.unitButton:SetHeight(20)
-    ed.unitButton:SetPoint("LEFT", ed.unitLabel, "RIGHT", 5, 0)
-    sA:SkinFrame(ed.unitButton, {0.2,0.2,0.2,1})
-    ed.unitButton.text = ed.unitButton:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-    ed.unitButton.text:SetPoint("CENTER", ed.unitButton, "CENTER", 0, 0)
-    ed.unitButton:SetScript("OnEnter", function() ed.unitButton:SetBackdropColor(0.5,0.5,0.5,1) end)
-    ed.unitButton:SetScript("OnLeave", function() ed.unitButton:SetBackdropColor(0.2,0.2,0.2,1) end)
-    ed.unitButton:SetScript("OnClick", function(self)
-      if not ed.unitButton.menu then
-        local menu = CreateFrame("Frame", nil, ed)
-        menu:SetPoint("TOPLEFT", ed.unitButton, "BOTTOMLEFT", 0, -2)
-        menu:SetFrameStrata("DIALOG")
-        menu:SetFrameLevel(10)
-        menu:SetWidth(80)
-        menu:SetHeight(40)
-        sA:SkinFrame(menu, {0.15,0.15,0.15,1})
-        menu:Hide()
-        ed.unitButton.menu = menu
-        local function makeChoice(text, index)
-          local b = CreateFrame("Button", nil, menu)
-          b:SetWidth(80)
-          b:SetHeight(20)
-          b:SetPoint("TOPLEFT", menu, "TOPLEFT", 0, -((index - 1) * 20))
-          sA:SkinFrame(b, {0.2,0.2,0.2,1})
-          b.text = b:CreateFontString(nil, "OVERLAY", "GameFontWhite")
-          b.text:SetPoint("CENTER", b, "CENTER", 0, 0)
-          b.text:SetText(text)
-          b:SetScript("OnEnter", function() b:SetBackdropColor(0.5,0.5,0.5,1) end)
-          b:SetScript("OnLeave", function() b:SetBackdropColor(0.2,0.2,0.2,1) end)
-          b:SetScript("OnClick", function()
-            ed.unitButton.text:SetText(text)
-            aura.unit = text
-            menu:Hide()
-            SaveAura(id)
-          end)
-        end
-        makeChoice("Player", 1)
-        makeChoice("Target", 2)
-      end
-      local menu = ed.unitButton.menu
-      if menu:IsVisible() then menu:Hide() else menu:Show() end
-    end)
-
     -- Type dropdown
     ed.typeLabel = ed:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-    ed.typeLabel:SetPoint("LEFT", ed.unitButton, "RIGHT", 42, 0)
+	ed.typeLabel:SetPoint("TOPLEFT", linetwo, "BOTTOMLEFT", 0, -45)
     ed.typeLabel:SetText("Type:")
     ed.typeButton = CreateFrame("Button", nil, ed)
     ed.typeButton:SetWidth(80)
@@ -552,19 +505,69 @@ function sA:EditAura(id)
         end
         makeChoice("Buff", 1)
         makeChoice("Debuff", 2)
+        makeChoice("Cooldown", 3)
       end
       local menu = ed.typeButton.menu
       if menu:IsVisible() then menu:Hide() else menu:Show() end
     end)
 
+    -- Unit dropdown
+	ed.unitLabel = ed:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+	ed.unitLabel:SetPoint("LEFT", ed.typeButton, "RIGHT", 42, 0)
+	ed.unitLabel:SetText("Unit:")
+	ed.unitButton = CreateFrame("Button", nil, ed)
+	ed.unitButton:SetWidth(80)
+	ed.unitButton:SetHeight(20)
+	ed.unitButton:SetPoint("LEFT", ed.unitLabel, "RIGHT", 5, 0)
+	sA:SkinFrame(ed.unitButton, {0.2,0.2,0.2,1})
+	ed.unitButton.text = ed.unitButton:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+	ed.unitButton.text:SetPoint("CENTER", ed.unitButton, "CENTER", 0, 0)
+	ed.unitButton:SetScript("OnEnter", function() ed.unitButton:SetBackdropColor(0.5,0.5,0.5,1) end)
+	ed.unitButton:SetScript("OnLeave", function() ed.unitButton:SetBackdropColor(0.2,0.2,0.2,1) end)
+	ed.unitButton:SetScript("OnClick", function(self)
+	  if not ed.unitButton.menu then
+		local menu = CreateFrame("Frame", nil, ed)
+		menu:SetPoint("TOPLEFT", ed.unitButton, "BOTTOMLEFT", 0, -2)
+		menu:SetFrameStrata("DIALOG")
+		menu:SetFrameLevel(10)
+		menu:SetWidth(80)
+		menu:SetHeight(40)
+		sA:SkinFrame(menu, {0.15,0.15,0.15,1})
+		menu:Hide()
+		ed.unitButton.menu = menu
+		local function makeChoice(text, index)
+		  local b = CreateFrame("Button", nil, menu)
+		  b:SetWidth(80)
+		  b:SetHeight(20)
+		  b:SetPoint("TOPLEFT", menu, "TOPLEFT", 0, -((index - 1) * 20))
+		  sA:SkinFrame(b, {0.2,0.2,0.2,1})
+		  b.text = b:CreateFontString(nil, "OVERLAY", "GameFontWhite")
+		  b.text:SetPoint("CENTER", b, "CENTER", 0, 0)
+		  b.text:SetText(text)
+		  b:SetScript("OnEnter", function() b:SetBackdropColor(0.5,0.5,0.5,1) end)
+		  b:SetScript("OnLeave", function() b:SetBackdropColor(0.2,0.2,0.2,1) end)
+		  b:SetScript("OnClick", function()
+			ed.unitButton.text:SetText(text)
+			aura.unit = text
+			menu:Hide()
+			SaveAura(id)
+		  end)
+		end
+		makeChoice("Player", 1)
+		makeChoice("Target", 2)
+	  end
+	  local menu = ed.unitButton.menu
+	  if menu:IsVisible() then menu:Hide() else menu:Show() end
+	end)
+
     -- Low duration options
     ed.lowduration = CreateFrame("Button", nil, ed)
     ed.lowduration:SetWidth(16)
     ed.lowduration:SetHeight(16)
-    ed.lowduration:SetPoint("TOPLEFT", ed.unitLabel, "BOTTOMLEFT", 0, -15)
+    ed.lowduration:SetPoint("TOPLEFT", ed.typeLabel, "BOTTOMLEFT", 0, -15)
     sA:SkinFrame(ed.lowduration, {0.15,0.15,0.15,1})
     ed.lowduration:SetScript("OnEnter", function() ed.lowduration:SetBackdropColor(0.5,0.5,0.5,1) end)
-    ed.lowduration:SetScript("OnLeave", function() ed.lowduration:SetBackdropColor(0.2,0.2,0.2,1) end)
+    ed.lowduration:SetScript("OnLeave", function() ed.lowduration:SetBackdropColor(0.15,0.15,0.15,1) end)
     ed.lowduration.checked = ed.lowduration:CreateTexture(nil, "OVERLAY")
     ed.lowduration.checked:SetTexture("Interface\\Buttons\\WHITE8x8")
     ed.lowduration.checked:SetVertexColor(1,0.8,0.06,1)
@@ -611,6 +614,56 @@ function sA:EditAura(id)
     ed.lowdurationLabelsuffix:SetPoint("LEFT", ed.lowdurationvalue, "RIGHT", 2, 0)
     ed.lowdurationLabelsuffix:SetText("sec)")
 
+    -- In Combat checkbox
+    ed.inCombat = CreateFrame("Button", nil, ed)
+    ed.inCombat:SetWidth(16)
+    ed.inCombat:SetHeight(16)
+    ed.inCombat:SetPoint("TOPLEFT", ed.lowduration, "BOTTOMLEFT", 0, -15)
+    sA:SkinFrame(ed.inCombat, {0.15,0.15,0.15,1})
+    ed.inCombat:SetScript("OnEnter", function() ed.inCombat:SetBackdropColor(0.5,0.5,0.5,1) end)
+    ed.inCombat:SetScript("OnLeave", function() ed.inCombat:SetBackdropColor(0.15,0.15,0.15,1) end)
+    ed.inCombat.checked = ed.inCombat:CreateTexture(nil, "OVERLAY")
+    ed.inCombat.checked:SetTexture("Interface\\Buttons\\WHITE8x8")
+    ed.inCombat.checked:SetVertexColor(1, 0.8, 0.06, 1)
+    ed.inCombat.checked:SetPoint("CENTER", ed.inCombat, "CENTER", 0, 0)
+    ed.inCombat.checked:SetWidth(7)
+    ed.inCombat.checked:SetHeight(7)
+    ed.inCombat.value = 0
+    ed.inCombat:SetScript("OnClick", function(self)
+      ed.inCombat.value = 1 - (ed.inCombat.value or 0)
+      if ed.inCombat.value == 1 then ed.inCombat.checked:Show() else ed.inCombat.checked:Hide() end
+	  SaveAura(id)
+    end)
+
+    ed.incombatLabel = ed:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    ed.incombatLabel:SetPoint("LEFT", ed.inCombat, "RIGHT", 5, 1)
+    ed.incombatLabel:SetText("In Combat")
+
+    -- Out of Combat checkbox
+    ed.outCombat = CreateFrame("Button", nil, ed)
+    ed.outCombat:SetWidth(16)
+    ed.outCombat:SetHeight(16)
+    ed.outCombat:SetPoint("LEFT", ed.incombatLabel, "RIGHT", 77, 0)
+    sA:SkinFrame(ed.outCombat, {0.15,0.15,0.15,1})
+    ed.outCombat:SetScript("OnEnter", function() ed.outCombat:SetBackdropColor(0.5,0.5,0.5,1) end)
+    ed.outCombat:SetScript("OnLeave", function() ed.outCombat:SetBackdropColor(0.15,0.15,0.15,1) end)
+    ed.outCombat.checked = ed.outCombat:CreateTexture(nil, "OVERLAY")
+    ed.outCombat.checked:SetTexture("Interface\\Buttons\\WHITE8x8")
+    ed.outCombat.checked:SetVertexColor(1, 0.8, 0.06, 1)
+    ed.outCombat.checked:SetPoint("CENTER", ed.outCombat, "CENTER", 0, 0)
+    ed.outCombat.checked:SetWidth(7)
+    ed.outCombat.checked:SetHeight(7)
+    ed.outCombat.value = 0
+    ed.outCombat:SetScript("OnClick", function(self)
+      ed.outCombat.value = 1 - (ed.outCombat.value or 0)
+      if ed.outCombat.value == 1 then ed.outCombat.checked:Show() else ed.outCombat.checked:Hide() end
+	  SaveAura(id)
+    end)
+
+    ed.outcombatLabel = ed:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    ed.outcombatLabel:SetPoint("LEFT", ed.outCombat, "RIGHT", 5, 1)
+    ed.outcombatLabel:SetText("Out of Combat")
+
     -- Invert / Dual
     ed.invert = CreateFrame("Button", nil, ed)
     ed.invert:SetWidth(16)
@@ -618,7 +671,7 @@ function sA:EditAura(id)
     ed.invert:SetPoint("BOTTOMLEFT", ed, "BOTTOMLEFT", 52.5, 30)
     sA:SkinFrame(ed.invert, {0.15,0.15,0.15,1})
     ed.invert:SetScript("OnEnter", function() ed.invert:SetBackdropColor(0.5,0.5,0.5,1) end)
-    ed.invert:SetScript("OnLeave", function() ed.invert:SetBackdropColor(0.2,0.2,0.2,1) end)
+    ed.invert:SetScript("OnLeave", function() ed.invert:SetBackdropColor(0.15,0.15,0.15,1) end)
     ed.invert.checked = ed.invert:CreateTexture(nil, "OVERLAY")
     ed.invert.checked:SetTexture("Interface\\Buttons\\WHITE8x8")
     ed.invert.checked:SetVertexColor(1,0.8,0.06,1)
@@ -633,7 +686,7 @@ function sA:EditAura(id)
     end)
     ed.invertLabel = ed:CreateFontString(nil, "OVERLAY", "GameFontNormal")
     ed.invertLabel:SetPoint("LEFT", ed.invert, "RIGHT", 5, 0)
-    ed.invertLabel:SetText("Invert")
+	ed.invertLabel:SetText("Invert")
 
     ed.dual = CreateFrame("Button", nil, ed)
     ed.dual:SetWidth(16)
@@ -641,7 +694,7 @@ function sA:EditAura(id)
     ed.dual:SetPoint("LEFT", ed.invertLabel, "RIGHT", 90, 0)
     sA:SkinFrame(ed.dual, {0.15,0.15,0.15,1})
     ed.dual:SetScript("OnEnter", function() ed.dual:SetBackdropColor(0.5,0.5,0.5,1) end)
-    ed.dual:SetScript("OnLeave", function() ed.dual:SetBackdropColor(0.2,0.2,0.2,1) end)
+    ed.dual:SetScript("OnLeave", function() ed.dual:SetBackdropColor(0.15,0.15,0.15,1) end)
     ed.dual.checked = ed.dual:CreateTexture(nil, "OVERLAY")
     ed.dual.checked:SetTexture("Interface\\Buttons\\WHITE8x8")
     ed.dual.checked:SetVertexColor(1,0.8,0.06,1)
@@ -657,6 +710,13 @@ function sA:EditAura(id)
     ed.dualLabel = ed:CreateFontString(nil, "OVERLAY", "GameFontNormal")
     ed.dualLabel:SetPoint("LEFT", ed.dual, "RIGHT", 5, 0)
     ed.dualLabel:SetText("Dual")
+	
+	if aura.type == "Cooldown" then
+		ed.unitLabel:Hide()
+		ed.unitButton:Hide()
+		ed.invertLabel:SetText("No CD")
+		ed.dualLabel:SetText("CD")
+	end
 
     -- Delete / Close / Copy buttons
     ed.delete = CreateFrame("Button", nil, ed)
@@ -722,8 +782,14 @@ function sA:EditAura(id)
   ed.lowdurationcolor = aura.lowdurationcolor or {1,0,0,1}
   ed.lowdurationcolorpicker.prev:SetTexture(unpack(ed.lowdurationcolor))
 
-  ed.unitButton.text:SetText(aura.unit or "Player")
   ed.typeButton.text:SetText(aura.type or "Buff")
+  if ed.unitButton then
+	ed.unitButton.text:SetText(aura.unit or "Player")
+  end
+  ed.inCombat.value = aura.inCombat or 0
+  if ed.inCombat.value == 1 then ed.inCombat.checked:Show() else ed.inCombat.checked:Hide() end
+  ed.outCombat.value = aura.outCombat or 0
+  if ed.outCombat.value == 1 then ed.outCombat.checked:Show() else ed.outCombat.checked:Hide() end
   ed.invert.value = aura.invert or 0
   if ed.invert.value == 1 then ed.invert.checked:Show() else ed.invert.checked:Hide() end
   ed.dual.value = aura.dual or 0
@@ -735,8 +801,8 @@ function sA:EditAura(id)
   sA.TestAura:SetHeight(48*(aura.scale or 1))
   sA.TestAura.texture:SetTexture(aura.texture)
   sA.TestAura.texture:SetVertexColor(unpack(aura.auracolor or {1,1,1,1}))
-  if aura.duration == 1 then sA.TestAura.durationtext:SetText("60") sA.TestAura.durationtext:SetFont("Fonts\\FRIZQT__.TTF", (18*aura.scale), "OUTLINE") else sA.TestAura.durationtext:SetText("") end
-  if aura.stacks == 1 then sA.TestAura.stackstext:SetText("20") sA.TestAura.stackstext:SetFont("Fonts\\FRIZQT__.TTF", (12*aura.scale), "OUTLINE") else sA.TestAura.stackstext:SetText("") end
+  if aura.duration == 1 then sA.TestAura.durationtext:SetText("60") sA.TestAura.durationtext:SetFont("Fonts\\FRIZQT__.TTF", (20*aura.scale), "OUTLINE") else sA.TestAura.durationtext:SetText("") end
+  if aura.stacks == 1 then sA.TestAura.stackstext:SetText("20") sA.TestAura.stackstext:SetFont("Fonts\\FRIZQT__.TTF", (14*aura.scale), "OUTLINE") else sA.TestAura.stackstext:SetText("") end
 	  
 	  local _, _, _, durationalpha = unpack(aura.auracolor or {1,1,1,1})
 	  local durationcolor = {1.0, 0.82, 0.0, durationalpha}
@@ -749,15 +815,15 @@ function sA:EditAura(id)
 	  
   sA.TestAura:Show()
   
-  if aura.dual == 1 then
+  if aura.dual == 1 and aura.type ~= "Cooldown" then
     sA.TestAuraDual:SetPoint("CENTER", UIParent, "CENTER", -(aura.xpos or 0), aura.ypos or 0)
     sA.TestAuraDual:SetWidth(48*(aura.scale or 1))
     sA.TestAuraDual:SetHeight(48*(aura.scale or 1))
     sA.TestAuraDual.texture:SetTexture(aura.texture)
     sA.TestAuraDual.texture:SetTexCoord(1,0,0,1)
     sA.TestAuraDual.texture:SetVertexColor(unpack(aura.auracolor or {1,1,1,1}))
-    if aura.duration == 1 then sA.TestAuraDual.durationtext:SetText("60") sA.TestAuraDual.durationtext:SetFont("Fonts\\FRIZQT__.TTF", (18*aura.scale), "OUTLINE") else sA.TestAuraDual.durationtext:SetText("") end
-    if aura.stacks == 1 then sA.TestAuraDual.stackstext:SetText("20") sA.TestAuraDual.stackstext:SetFont("Fonts\\FRIZQT__.TTF", (12*aura.scale), "OUTLINE") else sA.TestAuraDual.stackstext:SetText("") end
+    if aura.duration == 1 then sA.TestAuraDual.durationtext:SetText("60") sA.TestAuraDual.durationtext:SetFont("Fonts\\FRIZQT__.TTF", (20*aura.scale), "OUTLINE") else sA.TestAuraDual.durationtext:SetText("") end
+    if aura.stacks == 1 then sA.TestAuraDual.stackstext:SetText("20") sA.TestAuraDual.stackstext:SetFont("Fonts\\FRIZQT__.TTF", (14*aura.scale), "OUTLINE") else sA.TestAuraDual.stackstext:SetText("") end
     sA.TestAuraDual:Show()
   else
     sA.TestAuraDual:Hide()
@@ -1058,7 +1124,7 @@ SlashCmdList["sA"] = function(msg)
 			simpleAuras.refresh = num
 			DEFAULT_CHAT_FRAME:AddMessage("refresh set to " .. num .. " times per second")
 		else
-			DEFAULT_CHAT_FRAME:AddMessage("Usage: /sa refresh X - Set refresh rate. (1 to 100 updates per second. Default: 5)")
+			DEFAULT_CHAT_FRAME:AddMessage("Usage: /sa refresh X - Set refresh rate. (1 to 100 updates per second. Default: 10)")
 			DEFAULT_CHAT_FRAME:AddMessage("Current refresh = " .. tostring(simpleAuras.refresh) .. " times per second")
 		end
 		return
@@ -1067,7 +1133,6 @@ SlashCmdList["sA"] = function(msg)
 	-- Unknown command fallback
 	DEFAULT_CHAT_FRAME:AddMessage("Usage:")
 	DEFAULT_CHAT_FRAME:AddMessage("/sa or /sa show or /sa hide - Show/hide simpleAuras Settings")
-	DEFAULT_CHAT_FRAME:AddMessage("/sa refresh X - Set refresh rate. (1 to 100 updates per second. Default: 5)")
+	DEFAULT_CHAT_FRAME:AddMessage("/sa refresh X - Set refresh rate. (1 to 100 updates per second. Default: 10)")
 
 end
-

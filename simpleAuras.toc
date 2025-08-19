@@ -1,7 +1,7 @@
 ## Interface: 11200
 ## Title: |cff33ffccsimple|cffffffffAuras
 ## Notes: Simple Aura Display.
-## Version: 0.4
+## Version: 0.5
 ## Author: yani9o
 ## SavedVariablesPerCharacter: simpleAuras
 core.lua
