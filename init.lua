@@ -16,6 +16,7 @@ f:SetScript("OnEvent", function()
 	  simpleAuras.updating      = simpleAuras.updating or 0
 	  simpleAuras.showlearning  = simpleAuras.showlearning or 0
 	  simpleAuras.learnall      = simpleAuras.learnall or 0
+	  simpleAuras.nolearning    = simpleAuras.nolearning or {}  -- Spells excluded from learning
 	end
 		
 		sA.SettingsLoaded = 1
@@ -178,7 +179,8 @@ if sA.SuperWoW then
 
 		  local dur = GetAuraDurationBySpellID(spellID,casterGUID)
 	  
-		  if dur and dur > 0 and simpleAuras.updating == 0 and casterGUID == sA.playerGUID then
+		  -- Apply known duration if available (only for player casts when not in learnall mode)
+		  if dur and dur > 0 and simpleAuras.updating == 0 and (casterGUID == sA.playerGUID or simpleAuras.learnall == 1) then
 			sA.auraTimers[targetGUID] = sA.auraTimers[targetGUID] or {}
 			sA.auraTimers[targetGUID][spellID] = sA.auraTimers[targetGUID][spellID] or {}
 			if not sA.auraTimers[targetGUID][spellID].duration or (dur + timestamp) > sA.auraTimers[targetGUID][spellID].duration then
@@ -186,7 +188,9 @@ if sA.SuperWoW then
 				sA.auraTimers[targetGUID][spellID].castby = casterGUID
 			end
 			sA.learnNew[spellID] = nil
-		  elseif casterGUID == sA.playerGUID then
+		  -- Learn new duration (for player casts, or any cast when learnall is enabled)
+		  -- Skip learning if spell is in nolearning list
+		  elseif (casterGUID == sA.playerGUID or simpleAuras.learnall == 1) and not simpleAuras.nolearning[spellID] then
 
 			local showLearn = nil
 						
@@ -202,6 +206,7 @@ if sA.SuperWoW then
 			sA.auraTimers[targetGUID][spellID].duration = 0
 			sA.auraTimers[targetGUID][spellID].castby = casterGUID
 									
+			-- Check if we should show learning message (only for configured auras)
 			for _, auraID in ipairs(auraIDs) do
 				if simpleAuras.auras[auraID].unit ~= "Player" and simpleAuras.auras[auraID].type ~= "Cooldown" and simpleAuras.auras[auraID].type ~= "Reactive" then
 					showLearn = true
@@ -209,7 +214,8 @@ if sA.SuperWoW then
 				end
 			end
 						
-			if showLearn and casterGUID == sA.playerGUID and targetGUID ~= sA.playerGUID then
+			-- Mark for learning: if showLearn is true (for configured auras) or learnall is enabled, and target is not player
+			if (showLearn or simpleAuras.learnall == 1) and targetGUID ~= sA.playerGUID then
 				sA.learnNew[spellID] = 1
 			end
 			
@@ -528,6 +534,62 @@ SlashCmdList["sA"] = function(msg)
 		return
 	end
 	
+	-- nolearning command - exclude spells from learning
+	if cmd == "nolearning" then
+		if sA.SuperWoW then
+			if val and val ~= "" then
+				local spellID = tonumber(val)
+				if spellID then
+					if simpleAuras.nolearning[spellID] then
+						-- Remove from nolearning list
+						simpleAuras.nolearning[spellID] = nil
+						local spellName = SpellInfo(spellID)
+						sA:Msg("Removed " .. (spellName or "Unknown") .. " (ID:"..spellID..") from nolearning list.")
+					else
+						-- Add to nolearning list
+						simpleAuras.nolearning[spellID] = true
+						local spellName = SpellInfo(spellID)
+						sA:Msg("Added " .. (spellName or "Unknown") .. " (ID:"..spellID..") to nolearning list.")
+					end
+				elseif val == "list" then
+					-- Show list of excluded spells
+					local count = 0
+					for id, _ in pairs(simpleAuras.nolearning) do
+						count = count + 1
+					end
+					if count == 0 then
+						sA:Msg("Nolearning list is empty.")
+					else
+						sA:Msg("Nolearning list (" .. count .. " spells):")
+						for id, _ in pairs(simpleAuras.nolearning) do
+							local spellName = SpellInfo(id)
+							sA:Msg("  - " .. (spellName or "Unknown") .. " (ID:"..id..")")
+						end
+					end
+				elseif val == "clear" then
+					-- Clear all nolearning entries
+					local count = 0
+					for id, _ in pairs(simpleAuras.nolearning) do
+						count = count + 1
+					end
+					simpleAuras.nolearning = {}
+					sA:Msg("Cleared " .. count .. " spell(s) from nolearning list.")
+				else
+					sA:Msg("Usage: /sa nolearning <spellID> - toggle spell exclusion from learning.")
+					sA:Msg("Usage: /sa nolearning list - show all excluded spells.")
+					sA:Msg("Usage: /sa nolearning clear - clear all excluded spells.")
+				end
+			else
+				sA:Msg("Usage: /sa nolearning <spellID> - toggle spell exclusion from learning.")
+				sA:Msg("Usage: /sa nolearning list - show all excluded spells.")
+				sA:Msg("Usage: /sa nolearning clear - clear all excluded spells.")
+			end
+		else
+			sA:Msg("/sa nolearning needs SuperWoW to be installed!")
+		end
+		return
+	end
+	
 	-- reactduration command (special parsing for spell names with spaces)
 	if cmd == "reactduration" then
 		-- Extract everything after "reactduration" and parse manually
@@ -610,6 +672,7 @@ SlashCmdList["sA"] = function(msg)
 		sA:Msg("/sa update X - force AuraDurations updates (1 = re-learn aura durations. Default: 0).")
 		sA:Msg("/sa showlearning X - shows learning of new AuraDurations in chat (1 = show. Default: 0).")
 		sA:Msg("/sa learnall X - learn all AuraDurations, even if no Aura is set up. (1 = Active. Default: 0).")
+		sA:Msg("/sa nolearning X - exclude spellID X from learning (toggle). Use 'list' to show, 'clear' to clear all.")
 	end
 
 end

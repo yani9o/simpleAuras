@@ -14,7 +14,7 @@
 - Learning new AuraDuration gets prematurely completed if another player's aura with the same name runs out on the same target before yours - no way to get casterID when an aura fades.
 - Skills that apply Auras with the same name may show "learning" all the time (maybe this one is fixed now - wasn't able to test yet).
 - AddOn is kinda heavy on ressources (compared to other addons), will optimize in a future update.
-- /sa learnall 1 tries to learn spells without aura (i.e. smite, shadowbolt, etc.).
+- /sa learnall 1 tries to learn spells without aura (i.e. smite, shadowbolt, etc.). Use `/sa nolearning <spellID>` to exclude specific spells from learning.
 
 
 ## Console Commands:
@@ -32,6 +32,8 @@
 /sa showlearning X - shows learning of new AuraDurations in chat (1 = show. Default: 0).
 
 /sa learnall X - learn all AuraDurations, even if no Aura is set up. (1 = Active. Default: 0).
+
+/sa nolearning X - exclude spellID X from learning (toggle). Use 'list' to show all excluded spells, 'clear' to clear all exclusions.
 
 
 ## Settings (/sa)
@@ -155,9 +157,19 @@ simpleAuras tracks cooldowns for:
 ## SuperWoW Features
 If SuperWoW is installed, simpleAuras will automatically learn unkown durations of most of **your own** auras with the first cast (needs to run out to be accurate).
 
+When `/sa learnall 1` is enabled, the addon will also learn durations of spells cast by other players.
+
 Some Spells aren't properly tracked because they use different names during apply and fade or don't trigger the event used to track them (Enlighten -> Enlightened and Weakened Soul for example).
 
 In those cases, use "/sa learn X Y" to manually set duration Y for aura with ID X.
+
+### Excluding Spells from Learning
+If you want to prevent certain spells from being learned (e.g., instant cast spells that don't apply auras), use `/sa nolearning <spellID>`. This command toggles the exclusion - run it again to remove the spell from the exclusion list.
+
+Examples:
+- `/sa nolearning 18321` - Exclude spell ID 18321 from learning
+- `/sa nolearning list` - Show all excluded spells
+- `/sa nolearning clear` - Clear all exclusions
 
 ## Special Thanks / Credits
 - Torio ([SuperCleveRoidMacros](https://github.com/jrc13245/SuperCleveRoidMacros))
