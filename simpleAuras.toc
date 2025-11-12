@@ -1,9 +1,10 @@
 ## Interface: 11200
 ## Title: |c194b7dccsimple|cffffffffAuras
 ## Notes: Simple Aura Display. /sa help
-## Version: 1.0
+## Version: 1.1
 ## Author: yani9o
 ## SavedVariablesPerCharacter: simpleAuras
 init.lua
 core.lua
 gui.lua
+
