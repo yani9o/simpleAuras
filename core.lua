@@ -2,12 +2,21 @@
 local floor, format = math.floor, string.format
 local getn = table.getn
 local unpack = unpack
+local GetTime = GetTime
+local UnitExists = UnitExists
+local UnitAffectingCombat = UnitAffectingCombat
+local UnitInRaid = UnitInRaid
+local GetNumPartyMembers = GetNumPartyMembers
+local gsub = string.gsub
 
 -- Parent frame
 local sAParent = CreateFrame("Frame", "sAParentFrame", UIParent)
 sAParent:SetFrameStrata("BACKGROUND")
 sAParent:SetAllPoints(UIParent)
 
+---------------------------------------------------
+-- Aura Condition Evaluation (uses cached state)
+---------------------------------------------------
 function sA:ShouldAuraBeActive(aura, inCombat, inRaid, inParty)
   -- This check is now more robust and will correctly filter out new, empty auras.
   if not aura or not aura.name or aura.name == "" then return false end
@@ -57,9 +66,20 @@ function sA:ShouldAuraBeActive(aura, inCombat, inRaid, inParty)
 end
 
 -------------------------------------------------
--- Cooldown info by spell name
+-- Cooldown info by spell name with caching
 -------------------------------------------------
+local cooldownCache = {}
+local COOLDOWN_CACHE_TIME = 0.5
+
 function sA:GetCooldownInfo(spellName)
+  local now = GetTime()
+  local cached = cooldownCache[spellName]
+  
+  -- Return cached result if fresh enough
+  if cached and (now - cached.time) < COOLDOWN_CACHE_TIME then
+    return cached.texture, cached.remaining, cached.stacks
+  end
+  
   local i = 1
   while true do
     local name = GetSpellName(i, "spell")
@@ -71,14 +91,31 @@ function sA:GetCooldownInfo(spellName)
 
       local remaining
       if enabled == 1 and duration and duration > 1.5 then
-        remaining = (start + duration) - GetTime()
+        remaining = (start + duration) - now
         if remaining <= 0 then remaining = nil end
       end
 
+      -- Cache the result
+      cooldownCache[spellName] = {
+        texture = texture,
+        remaining = remaining,
+        stacks = 0,
+        time = now
+      }
+      
       return texture, remaining, 0
     end
     i = i + 1
   end
+  
+  -- Cache negative result too
+  cooldownCache[spellName] = {
+    texture = nil,
+    remaining = nil,
+    stacks = 0,
+    time = now
+  }
+  return nil, nil, 0
 end
 
 -------------------------------------------------
@@ -209,80 +246,97 @@ function sA:GetAuraInfos(auraname, unit, auratype)
 end
 
 -------------------------------------------------
--- Frame creation helpers
+-- Test frames
 -------------------------------------------------
-local FONT = "Fonts\\FRIZQT__.TTF"
+function sA:UpdateTestFrame(aura)
+  if not (gui and gui.editor and gui.editor:IsVisible()) then return end
+  if not sA.TestAura then return end
 
+  local TestAura = sA.TestAura
+  local TestAuraDual = sA.TestAuraDual
+  local scale = aura.scale or 1
+
+  TestAura:SetPoint("CENTER", UIParent, "CENTER", aura.xpos or 0, aura.ypos or 0)
+  TestAura:SetWidth(48 * scale)
+  TestAura:SetHeight(48 * scale)
+  TestAura:SetFrameLevel(128)
+  TestAura.texture:SetTexture(aura.texture)
+  TestAura.durationtext:SetFont(FONT, 20 * scale, "OUTLINE")
+  TestAura.stackstext:SetFont(FONT, 14 * scale, "OUTLINE")
+  
+  local r, g, b, alpha = unpack(aura.auracolor or {1, 1, 1, 1})
+  TestAura.texture:SetVertexColor(r, g, b, alpha)
+  TestAura.durationtext:SetTextColor(1.0, 0.82, 0.0, alpha)
+  TestAura.stackstext:SetTextColor(1, 1, 1, alpha)
+  
+  if aura.duration == 1 then TestAura.durationtext:SetText("12") else TestAura.durationtext:SetText("") end
+  if aura.stacks == 1 then TestAura.stackstext:SetText("3") else TestAura.stackstext:SetText("") end
+  TestAura:Show()
+
+  if aura.dual == 1 and aura.type ~= "Cooldown" then
+    TestAuraDual:SetPoint("CENTER", UIParent, "CENTER", -(aura.xpos or 0), aura.ypos or 0)
+    TestAuraDual:SetWidth(48 * scale)
+    TestAuraDual:SetHeight(48 * scale)
+    TestAuraDual:SetFrameLevel(128)
+    TestAuraDual.texture:SetTexture(aura.texture)
+    TestAuraDual.texture:SetVertexColor(r, g, b, alpha)
+    TestAuraDual.durationtext:SetFont(FONT, 20 * scale, "OUTLINE")
+    TestAuraDual.stackstext:SetFont(FONT, 14 * scale, "OUTLINE")
+    TestAuraDual.durationtext:SetTextColor(1.0, 0.82, 0.0, alpha)
+    if aura.duration == 1 then TestAuraDual.durationtext:SetText("12") else TestAuraDual.durationtext:SetText("") end
+    if aura.stacks == 1 then TestAuraDual.stackstext:SetText("3") else TestAuraDual.stackstext:SetText("") end
+    TestAuraDual:Show()
+  else
+    TestAuraDual:Hide()
+  end
+end
+
+-------------------------------------------------
+-- Create Aura Frames
+-------------------------------------------------
 local function CreateAuraFrame(id)
-  local f = CreateFrame("Frame", "sAAura" .. id, UIParent)
+  local f = CreateFrame("Frame", "sAFrame" .. id, sAParent)
   f:SetFrameStrata("BACKGROUND")
-  f:SetMovable(true)
-  f:SetClampedToScreen(true)
-  f:SetUserPlaced(true) -- Tell WoW that this frame's position is managed by the user
-
   f.texture = f:CreateTexture(nil, "ARTWORK")
   f.texture:SetAllPoints(f)
-
   f.durationtext = f:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-  f.durationtext:SetFont(FONT, 12, "OUTLINE")
   f.durationtext:SetPoint("CENTER", f, "CENTER", 0, 0)
-
   f.stackstext = f:CreateFontString(nil, "OVERLAY", "GameFontWhite")
-  f.stackstext:SetFont(FONT, 10, "OUTLINE")
   f.stackstext:SetPoint("TOPLEFT", f.durationtext, "CENTER", 1, -6)
-
+  f:Hide()
   return f
 end
 
-local function CreateDualFrame(id)
-  local f = CreateAuraFrame(id)
-  f.texture:SetTexCoord(1, 0, 0, 1)
-  f.stackstext:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", -2, 2)
-  return f
-end
-
-local function CreateDraggerFrame(id, auraFrame)
-  local dragger = CreateFrame("Frame", "sADragger" .. id, auraFrame)
-  dragger:SetAllPoints(auraFrame)
+local function CreateDraggerFrame(id, frame)
+  local dragger = CreateFrame("Frame", "sADragger" .. id, frame)
+  dragger:SetAllPoints(frame)
   dragger:SetFrameStrata("HIGH")
   dragger:EnableMouse(true)
   dragger:RegisterForDrag("LeftButton")
+  dragger:SetBackdrop({edgeFile = "Interface\\Buttons\\WHITE8x8", edgeSize = 1})
+  dragger:SetBackdropBorderColor(0, 1, 0, 0.5)
 
-  dragger:SetScript("OnDragStart", function(self)
-    auraFrame:StartMoving()
+  dragger:SetScript("OnDragStart", function()
+    frame:SetMovable(true)
+    frame:StartMoving()
   end)
 
-  dragger:SetScript("OnDragStop", function(self)
-    auraFrame:StopMovingOrSizing()
+  dragger:SetScript("OnDragStop", function()
+    frame:StopMovingOrSizing()
+    frame:SetMovable(false)
     
-    -- We must calculate the offset from the screen's center because
-    -- SetPoint uses a center-based coordinate system, while GetPoint
-    -- returns coordinates from a corner anchor. This mismatch
-    -- was causing auras to fly off-screen after being moved.
-    local frameX, frameY = auraFrame:GetCenter()
+    local frameX, frameY = frame:GetCenter()
     local screenWidth, screenHeight = GetScreenWidth(), GetScreenHeight()
     
     local offsetX = frameX - (screenWidth / 2)
     local offsetY = frameY - (screenHeight / 2)
-
-    -- Round coordinates to prevent floating point issues in SavedVariables
-    simpleAuras.auras[id].xpos = math.floor(offsetX + 0.5)
-    simpleAuras.auras[id].ypos = math.floor(offsetY + 0.5)
-	
-	-- if gui.editor then
-	  -- gui.editor:Hide()
-	  -- gui.editor = nil
-	  -- sA:EditAura(id)
-	-- end
-	
+    offsetX = floor(offsetX + 0.5)
+    offsetY = floor(offsetY + 0.5)
+    
+    simpleAuras.auras[id].xpos = offsetX
+    simpleAuras.auras[id].ypos = offsetY
   end)
-  
-  -- Add a border to make it visible
-  dragger:SetBackdrop({
-    edgeFile = "Interface\\Buttons\\WHITE8x8",
-    edgeSize = 1,
-  })
-  dragger:SetBackdropBorderColor(0, 1, 0, 0.5) -- Green, semi-transparent
+
   dragger:Hide()
   return dragger
 end
@@ -295,8 +349,12 @@ local function CreateDualFrame(id)
 end
 
 -------------------------------------------------
--- Update aura display
+-- Update aura display (uses event-driven state)
 -------------------------------------------------
+local function IsAuraActive(aura)
+  return aura and aura.name and aura.name ~= "" and (aura.enabled == nil or aura.enabled == 1)
+end
+
 function sA:UpdateAuras()
 
   if not sA.SettingsLoaded then return end
@@ -308,16 +366,20 @@ function sA:UpdateAuras()
     if gui and gui.editor then gui.editor:Hide(); gui.editor = nil end
   end
 
-  -- Get the current player status once per cycle
-  local hasTarget = UnitExists("target")
-  local inCombat = UnitAffectingCombat("player")
-  local inRaid = UnitInRaid("player")
-  local inParty = GetNumPartyMembers() > 0 and not inRaid
+  -- EVENT-DRIVEN: Use cached game state from events (no polling)
+  -- State is updated by events: PLAYER_REGEN_*, RAID_ROSTER_UPDATE, 
+  -- PARTY_MEMBERS_CHANGED, PLAYER_TARGET_CHANGED
+  local inCombat = sA.gameState.inCombat
+  local inRaid = sA.gameState.inRaid
+  local inParty = sA.gameState.inParty
+  local hasTarget = sA.gameState.hasTarget
 
   for id, aura in ipairs(simpleAuras.auras) do
-    -- Add a guard clause to skip invalid/empty auras completely.
-    -- This prevents errors when a new, unconfigured aura exists.
-    if aura and aura.name then
+    -- OPTIMIZATION: Quick check to skip disabled auras entirely
+    if not IsAuraActive(aura) then
+      if self.frames[id] then self.frames[id]:Hide() end
+      if self.dualframes[id] then self.dualframes[id]:Hide() end
+    else
       local show, icon, duration, stacks
       local currentDuration, currentStacks, currentDurationtext, spellID = 600, 20, "", nil
 
@@ -328,7 +390,7 @@ function sA:UpdateAuras()
       self.draggers[id] = dragger
       if aura.dual == 1 and aura.type ~= "Cooldown" then self.dualframes[id] = dualframe end
       
-      local isEnabled = (aura.enabled == nil or aura.enabled == 1)
+      local isEnabled = true -- Already checked above
       local shouldShow
 
       if gui and gui:IsVisible() then
@@ -419,6 +481,7 @@ function sA:UpdateAuras()
         -- Apply visuals
         -------------------------------------------------
         local scale = aura.scale or 1
+		local textscale
 		if currentDurationtext == "learning" then
 			textscale = scale/2
 		else
@@ -481,10 +544,6 @@ function sA:UpdateAuras()
         if frame     then frame:Hide()     end
         if dualframe then dualframe:Hide() end
       end
-    else
-      -- This is a new/empty aura, make sure its frame is hidden if it exists
-      if self.frames[id] then self.frames[id]:Hide() end
-      if self.dualframes[id] then self.dualframes[id]:Hide() end
     end
   end
 end
