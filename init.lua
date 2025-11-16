@@ -337,9 +337,25 @@ sADataUpdate:SetScript("OnUpdate", function()
     end
   end
   
-  -- Update cooldown and reactive states
+  -- Update cooldown and reactive states (poison has its own 3-second timer)
   sA:UpdateCooldownData()
   sA:UpdateReactiveData()
+end)
+
+-- Poison data updates (fixed 3-second interval, independent of refresh rate)
+local sAPoisonUpdate = CreateFrame("Frame", "sAPoisonUpdate", UIParent)
+sAPoisonUpdate:SetScript("OnUpdate", function()
+  if not sA.SettingsLoaded then return end
+  
+  local time = GetTime()
+  -- Fixed 3-second interval for poison updates
+  local poisonRefreshRate = 3.0
+  if (time - (sAPoisonUpdate.lastUpdate or 0)) < poisonRefreshRate then return end
+  
+  sAPoisonUpdate.lastUpdate = time
+  
+  -- Update poison data
+  sA:UpdatePoisonData()
 end)
 
 -- Combat state
@@ -399,9 +415,10 @@ sAAuraTracker:SetScript("OnEvent", function()
     sA:UpdateCooldownData()
     
   elseif event == "UNIT_INVENTORY_CHANGED" then
-    -- Equipped items changed (trinkets, etc)
+    -- Equipped items changed (trinkets, weapons with poisons, etc)
     if arg1 == "player" then
       sA:UpdateCooldownData()
+      sA:UpdatePoisonData()
     end
     
   elseif event == "SPELL_UPDATE_USABLE" then

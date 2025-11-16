@@ -76,12 +76,24 @@ Icon/Texture:
 - Browse: Choose a texture.
 - Scale: Basescale of 1 is 48x48px.
 - x/y pos: Position from center of the screen.
-- Show Duration*/Stacks: Shows Duration in the center of the icon/texture, stacks are under that.
+- Show Duration*/Stacks: Shows Duration and/or Stacks on the icon/texture.
+- Duration Size/Stacks Size: Adjustable font size for duration and stacks text (default: 20 for duration, 14 for stacks).
+  - Text positioning:
+    - If both Duration and Stacks are enabled: Duration appears at the top, Stacks at the bottom.
+    - If only Duration is enabled: Duration appears centered.
+    - If only Stacks is enabled: Stacks appear centered.
 
 
 Conditions:
 - Unit: Which unit the aura is on.
-- Type: is it a buff or a debuff.
+  - For Buff/Debuff types: `Player` or `Target`
+  - For Poison type: `MH` (MainHand) or `OH` (OffHand)
+- Type: Type of aura to track.
+  - `Buff`: Tracks beneficial effects
+  - `Debuff`: Tracks harmful effects
+  - `Cooldown`: Tracks spell/item cooldowns
+  - `Reactive`: Tracks proc-based abilities (Riposte, Overpower, etc)
+  - `Poison`: Tracks poison enchantments on weapons
 - Low Duration Color*: If the auracolor should change at or below "lowduration"
 - Low Duration in secs*: Allways active, changes durationcolor to red if at or below, also changes color if activated.
 - In/Out of Combat: When aura should be shown
@@ -90,6 +102,11 @@ Conditions:
 Buff/Debuff:
 - Invert: Activate to show aura if not found.
 - Dual: Mirrors the aura (if xpos = -150, then it will show a mirrored icon/texture at xpos 150).
+
+Poison:
+- Unit: Select `MH` (MainHand) or `OH` (OffHand) to track poison on that weapon slot
+- Automatically detects poison presence, duration, and charges
+- Updates every 3 seconds (independent of refresh rate setting)
 
 Cooldown:
 - Always: Shows Cooldown Icon if it's on CD or not.
@@ -105,6 +122,30 @@ Other:
 
 \* = For these functions to work on targets SuperWoW is REQUIRED! Also only shows your own AuraDurations.
 
+
+## Poison Tracking
+
+simpleAuras can track poison enchantments on your weapons (MainHand and OffHand). This allows you to monitor when your poisons expire and how many charges remain.
+
+### How to set up:
+
+1. **Create the aura:**
+   - Type: `Poison`
+   - Unit: Select `MH` (MainHand) or `OH` (OffHand)
+   - Aura Name: Can be any name (poison type is detected automatically)
+   - Enable: `Show Duration` and/or `Show Stacks` as needed
+   - Duration Size/Stacks Size: Adjust font sizes for better visibility
+
+2. **Usage:**
+   - The aura will automatically detect when a poison is applied to the selected weapon
+   - Shows remaining duration and charges (if available)
+   - Updates every 3 seconds (independent of refresh rate)
+   - Updates immediately when weapon is changed or poison is applied/removed
+
+### Notes:
+- Poison data updates use a fixed 3-second timer for performance (independent of `/sa refresh` setting)
+- Works best with weapon slots that can have poisons applied
+- Charges display depends on poison type (some poisons don't show charge count)
 
 ## Reactive Spells Setup (Riposte, Overpower, etc)
 

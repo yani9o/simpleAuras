@@ -171,6 +171,52 @@ function sA:GetCooldownInfo(spellName)
 end
 
 -------------------------------------------------
+-- Poison info (weapon enchantments)
+-- Returns: hasEnchant, duration, charges, texture
+-- unit can be "MH" (MainHand) or "OH" (OffHand)
+-------------------------------------------------
+function sA:GetPoisonInfo(unit)
+  local mh, mhtime, mhcharge, oh, ohtime, ohcharge = GetWeaponEnchantInfo()
+  
+  local hasEnchant, timeLeft, charges
+  
+  if unit == "MH" then
+    hasEnchant = mh
+    timeLeft = mhtime
+    charges = mhcharge
+  elseif unit == "OH" then
+    hasEnchant = oh
+    timeLeft = ohtime
+    charges = ohcharge
+  else
+    return nil, nil, nil, nil
+  end
+  
+  if not hasEnchant then
+    return nil, nil, nil, nil
+  end
+  
+  -- Convert milliseconds to seconds for duration
+  local duration = timeLeft and (timeLeft / 1000) or nil
+  
+  -- Get texture from weapon enchant tooltip
+  -- For now, we'll use a default poison texture or get from tooltip
+  -- In WoW, poison icons are usually obtained from GetInventoryItemTexture
+  local texture = "Interface\\Icons\\INV_Potion_19"
+  
+  -- Try to get actual poison texture from equipped weapon slot
+  local slotID = (unit == "MH") and 16 or 17  -- 16=MainHand, 17=OffHand
+  local itemTexture = GetInventoryItemTexture("player", slotID)
+  if itemTexture then
+    -- For poisons, we can't directly get the poison icon, but we can use weapon texture as fallback
+    -- In practice, user should set texture manually or we use default
+    texture = itemTexture
+  end
+  
+  return hasEnchant, duration, charges, texture
+end
+
+-------------------------------------------------
 -- Reactive spell info (proc-based abilities)
 -- Returns: spellID (index in spellbook), texture
 -------------------------------------------------
@@ -302,6 +348,67 @@ function sA:HandleReactiveSpellUsed(spellName)
           sA:Msg("Reactive spell '" .. spellName .. "' used - deactivated")
         end
         break
+      end
+    end
+  end
+end
+
+-------------------------------------------------
+-- Update poison data (fixed 3-second interval + event-driven)
+-- This function FETCHES poison info from GetWeaponEnchantInfo() and STORES it in cache
+-- Called by:
+--   - UNIT_INVENTORY_CHANGED events (immediate)
+--   - Fixed 3-second timer (independent of refresh rate)
+-------------------------------------------------
+function sA:UpdatePoisonData()
+  if not simpleAuras or not simpleAuras.auras then return end
+  
+  local currentTime = GetTime()
+  
+  for id, aura in ipairs(simpleAuras.auras) do
+    if aura and aura.name and aura.name ~= "" and aura.type == "Poison" then
+      
+      sA.activeAuras[id] = sA.activeAuras[id] or {
+        active = false,
+        expiry = nil,
+        stacks = 0,
+        icon = nil,
+        spellID = nil,
+        lastUpdate = 0,
+        lastScan = 0
+      }
+      
+      -- Get poison info for the specified unit (MH or OH)
+      local hasEnchant, duration, charges, texture = self:GetPoisonInfo(aura.unit)
+      
+      if hasEnchant then
+        -- Poison is present
+        local expiry = nil
+        if duration and duration > 0 then
+          expiry = currentTime + duration
+        end
+        
+        sA.activeAuras[id].active = true
+        sA.activeAuras[id].expiry = expiry
+        sA.activeAuras[id].stacks = charges or 0
+        sA.activeAuras[id].icon = texture
+        sA.activeAuras[id].spellID = nil  -- Poisons don't have spell IDs
+        sA.activeAuras[id].lastUpdate = currentTime
+        sA.activeAuras[id].lastScan = currentTime
+        
+        -- Auto-detect texture
+        if aura.autodetect == 1 and texture and aura.texture ~= texture then
+          aura.texture = texture
+          simpleAuras.auras[id].texture = texture
+        end
+      else
+        -- No poison on this weapon
+        sA.activeAuras[id].active = false
+        sA.activeAuras[id].expiry = nil
+        sA.activeAuras[id].stacks = 0
+        sA.activeAuras[id].lastUpdate = currentTime
+        sA.activeAuras[id].lastScan = currentTime
+        -- Note: sA.activeAuras[id].icon is preserved from last scan
       end
     end
   end
@@ -507,15 +614,8 @@ local function CreateAuraFrame(id)
 
   f.stackstext = f:CreateFontString(nil, "OVERLAY", "GameFontWhite")
   f.stackstext:SetFont(FONT, 10, "OUTLINE")
-  f.stackstext:SetPoint("TOPLEFT", f.durationtext, "CENTER", 1, -6)
+  f.stackstext:SetPoint("CENTER", f, "CENTER", 0, 0)
 
-  return f
-end
-
-local function CreateDualFrame(id)
-  local f = CreateAuraFrame(id)
-  f.texture:SetTexCoord(1, 0, 0, 1)
-  f.stackstext:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", -2, 2)
   return f
 end
 
@@ -568,7 +668,7 @@ end
 local function CreateDualFrame(id)
   local f = CreateAuraFrame(id)
   f.texture:SetTexCoord(1, 0, 0, 1)
-  f.stackstext:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", -2, 2)
+  -- Stacks are centered like in CreateAuraFrame (already set in CreateAuraFrame)
   return f
 end
 
@@ -598,6 +698,7 @@ function sA:InitializeAuraCache()
   self:UpdateAuraDataForUnit("Target")
   self:UpdateCooldownData()
   self:UpdateReactiveData()
+  self:UpdatePoisonData()
 end
 
 -------------------------------------------------
@@ -614,8 +715,8 @@ function sA:UpdateAuraDataForUnit(unitFilter)
   local currentTime = GetTime()
   
   for id, aura in ipairs(simpleAuras.auras) do
-    -- Only process auras for this unit (skip Cooldown and Reactive - they have their own handlers)
-    if aura and aura.name and aura.name ~= "" and aura.unit == unitFilter and aura.type ~= "Cooldown" and aura.type ~= "Reactive" then
+    -- Only process auras for this unit (skip Cooldown, Reactive, and Poison - they have their own handlers)
+    if aura and aura.name and aura.name ~= "" and aura.unit == unitFilter and aura.type ~= "Cooldown" and aura.type ~= "Reactive" and aura.type ~= "Poison" then
       
       -- Initialize cache entry
       sA.activeAuras[id] = sA.activeAuras[id] or {
@@ -815,6 +916,23 @@ function sA:UpdateAuras()
                 duration = nil
                 stacks = 0
               end
+            elseif aura.type == "Poison" then
+              -- Poison: use cached data from UpdatePoisonData
+              local auraData = sA.activeAuras[id]
+              if auraData and auraData.active then
+                icon = auraData.icon
+                if auraData.expiry then
+                  duration = auraData.expiry - GetTime()
+                  if duration <= 0 then duration = nil end
+                else
+                  duration = nil
+                end
+                stacks = auraData.stacks or 0
+              else
+                icon = nil
+                duration = nil
+                stacks = 0
+              end
             else
               -- Buff/Debuff/Cooldown: get from API
               if sA.SuperWoW then
@@ -830,8 +948,8 @@ function sA:UpdateAuras()
             if aura.type == "Cooldown" then
               local onCooldown = duration and duration > 0
               show = (((aura.showCD == "No CD" or aura.showCD == "Always") and not onCooldown) or ((aura.showCD == "CD" or aura.showCD == "Always") and onCooldown)) and 1 or 0
-            elseif aura.type == "Reactive" then
-              -- For reactive spells: show when proc is ready
+            elseif aura.type == "Reactive" or aura.type == "Poison" then
+              -- For reactive spells and poisons: show when present
               show = auraIsPresent
             elseif aura.invert == 1 then
               show = 1 - auraIsPresent
@@ -859,6 +977,19 @@ function sA:UpdateAuras()
             icon = auraData.icon
             duration = auraData.expiry - GetTime()
             stacks = 0
+          end
+        elseif aura.type == "Poison" then
+          -- Poison: use cached data (updated by UpdatePoisonData)
+          local auraData = sA.activeAuras[id]
+          if auraData and auraData.active then
+            icon = auraData.icon
+            if auraData.expiry then
+              duration = auraData.expiry - GetTime()
+              if duration <= 0 then duration = nil end
+            else
+              duration = nil
+            end
+            stacks = auraData.stacks or 0
           end
         elseif not (icon or aura.name) then -- Data might not have been fetched in /sa mode
 		  spellID = nil
@@ -917,10 +1048,32 @@ function sA:UpdateAuras()
         end
         
         frame.texture:SetTexture(textureToUse)
-        frame.durationtext:SetText((aura.duration == 1 and (sA.SuperWoW or aura.unit == "Player" or aura.type == "Cooldown" or aura.type == "Reactive")) and currentDurationtext or "")
+        frame.durationtext:SetText((aura.duration == 1 and (sA.SuperWoW or aura.unit == "Player" or aura.type == "Cooldown" or aura.type == "Reactive" or aura.type == "Poison")) and currentDurationtext or "")
         frame.stackstext:SetText((aura.stacks == 1) and currentStacks or "")
-        if aura.duration == 1 then frame.durationtext:SetFont(FONT, 20 * textscale, "OUTLINE") end
-        if aura.stacks   == 1 then frame.stackstext:SetFont(FONT, 14 * scale, "OUTLINE") end
+        
+        -- Position duration and stacks based on settings
+        if aura.duration == 1 and aura.stacks == 1 then
+          -- Both enabled: move duration up, stacks down
+          frame.durationtext:SetPoint("CENTER", frame, "CENTER", 0, 8)
+          frame.stackstext:SetPoint("CENTER", frame, "CENTER", 0, -8)
+          local durationFontSize = (aura.durationSize or 20) * textscale
+          frame.durationtext:SetFont(FONT, durationFontSize, "OUTLINE")
+        elseif aura.duration == 1 then
+          -- Only duration enabled: center duration
+          frame.durationtext:SetPoint("CENTER", frame, "CENTER", 0, 0)
+          frame.stackstext:SetPoint("CENTER", frame, "CENTER", 0, 0)
+          local durationFontSize = (aura.durationSize or 20) * textscale
+          frame.durationtext:SetFont(FONT, durationFontSize, "OUTLINE")
+        else
+          -- Duration disabled: center stacks (if enabled)
+          frame.durationtext:SetPoint("CENTER", frame, "CENTER", 0, 0)
+          frame.stackstext:SetPoint("CENTER", frame, "CENTER", 0, 0)
+        end
+        
+        if aura.stacks == 1 then 
+          local stacksFontSize = (aura.stacksSize or 14) * scale
+          frame.stackstext:SetFont(FONT, stacksFontSize, "OUTLINE") 
+        end
 
         -- Check for equipped item warning (should be equipped but in bag)
         local auraData = sA.activeAuras[id]
@@ -945,7 +1098,7 @@ function sA:UpdateAuras()
 
         local durationcolor = {1.0, 0.82, 0.0, alpha}
         local stackcolor    = {1, 1, 1, alpha}
-        if (sA.SuperWoW or aura.unit == "Player" or aura.type == "Cooldown" or aura.type == "Reactive") and (currentDuration and currentDuration <= (aura.lowdurationvalue or 5)) and currentDurationtext ~= "learning" then
+        if (sA.SuperWoW or aura.unit == "Player" or aura.type == "Cooldown" or aura.type == "Reactive" or aura.type == "Poison") and (currentDuration and currentDuration <= (aura.lowdurationvalue or 5)) and currentDurationtext ~= "learning" then
           durationcolor = {1, 0, 0, alpha}
         end
         frame.durationtext:SetTextColor(unpack(durationcolor))
@@ -955,7 +1108,7 @@ function sA:UpdateAuras()
         -------------------------------------------------
         -- Dual frame
         -------------------------------------------------
-        if aura.dual == 1 and aura.type ~= "Cooldown" and aura.type ~= "Reactive" and dualframe then
+        if aura.dual == 1 and aura.type ~= "Cooldown" and aura.type ~= "Reactive" and aura.type ~= "Poison" and dualframe then
           dualframe:SetPoint("CENTER", UIParent, "CENTER", -(aura.xpos or 0), aura.ypos or 0)
           dualframe:SetFrameLevel(aura.layer or 0)
           dualframe:SetWidth(48 * scale)
@@ -966,10 +1119,32 @@ function sA:UpdateAuras()
           else
             dualframe.texture:SetVertexColor(r, g, b, alpha)
           end
-          dualframe.durationtext:SetText((aura.duration == 1 and (sA.SuperWoW or aura.unit == "Player" or aura.type == "Cooldown" or aura.type == "Reactive")) and currentDurationtext or "")
+          dualframe.durationtext:SetText((aura.duration == 1 and (sA.SuperWoW or aura.unit == "Player" or aura.type == "Cooldown" or aura.type == "Reactive" or aura.type == "Poison")) and currentDurationtext or "")
           dualframe.stackstext:SetText((aura.stacks == 1) and currentStacks or "")
-          if aura.duration == 1 then dualframe.durationtext:SetFont(FONT, 20 * scale, "OUTLINE") end
-          if aura.stacks   == 1 then dualframe.stackstext:SetFont(FONT, 14 * scale, "OUTLINE") end
+          
+          -- Position duration and stacks based on settings (same as main frame)
+          if aura.duration == 1 and aura.stacks == 1 then
+            -- Both enabled: move duration up, stacks down
+            dualframe.durationtext:SetPoint("CENTER", dualframe, "CENTER", 0, 8)
+            dualframe.stackstext:SetPoint("CENTER", dualframe, "CENTER", 0, -8)
+            local durationFontSize = (aura.durationSize or 20) * scale
+            dualframe.durationtext:SetFont(FONT, durationFontSize, "OUTLINE")
+          elseif aura.duration == 1 then
+            -- Only duration enabled: center duration
+            dualframe.durationtext:SetPoint("CENTER", dualframe, "CENTER", 0, 0)
+            dualframe.stackstext:SetPoint("CENTER", dualframe, "CENTER", 0, 0)
+            local durationFontSize = (aura.durationSize or 20) * scale
+            dualframe.durationtext:SetFont(FONT, durationFontSize, "OUTLINE")
+          else
+            -- Duration disabled: center stacks (if enabled)
+            dualframe.durationtext:SetPoint("CENTER", dualframe, "CENTER", 0, 0)
+            dualframe.stackstext:SetPoint("CENTER", dualframe, "CENTER", 0, 0)
+          end
+          
+          if aura.stacks == 1 then 
+            local stacksFontSize = (aura.stacksSize or 14) * scale
+            dualframe.stackstext:SetFont(FONT, stacksFontSize, "OUTLINE") 
+          end
           dualframe.durationtext:SetTextColor(unpack(durationcolor))
           dualframe:Show()
         elseif dualframe then
