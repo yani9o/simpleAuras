@@ -4,7 +4,7 @@
 - This AddOn is still in development.
 - There will be functions that don't work as they should.
 - Please report bugs.
-- Currently don't have time to work alot on the AddOn, but i check Issues often.
+- Currently not working on this AddOn (irl reasons)
 
 
 <img width="508" height="322" alt="image" src="https://github.com/user-attachments/assets/15338563-4fbd-454c-9609-3d95f0214cc0" />
