@@ -1,11 +1,8 @@
 # simpleAuras
 
 ### ⚠️ **Information**
-- This AddOn is still in development.
+- This AddOn is not actively developed anymore.
 - There will be functions that don't work as they should.
-- Please report bugs.
-- Currently not working on this AddOn (irl reasons)
-
 
 <img width="508" height="322" alt="image" src="https://github.com/user-attachments/assets/15338563-4fbd-454c-9609-3d95f0214cc0" />
 
