@@ -114,7 +114,34 @@ if not gui then
 
   local title = gui:CreateFontString(nil, "OVERLAY", "GameFontNormal")
   title:SetPoint("TOP", 0, -5)
-  title:SetText("simpleAuras")
+  title:SetText("simpleAuras v" .. (sA.VERSION or "1.0"))
+
+  -- ScrollFrame for aura list
+  gui.scrollFrame = CreateFrame("ScrollFrame", "sAGUIScrollFrame", gui)
+  gui.scrollFrame:SetPoint("TOPLEFT", 20, -30)
+  gui.scrollFrame:SetPoint("BOTTOMRIGHT", -20, 10)
+  
+  -- Content frame (holds the aura rows)
+  gui.scrollContent = CreateFrame("Frame", "sAGUIScrollContent", gui.scrollFrame)
+  gui.scrollContent:SetWidth(260)
+  gui.scrollContent:SetHeight(1) -- Will be adjusted dynamically
+  gui.scrollFrame:SetScrollChild(gui.scrollContent)
+  
+  -- MouseWheel support
+  gui.scrollFrame:EnableMouseWheel(true)
+  gui.scrollFrame:SetScript("OnMouseWheel", function()
+    local scroll = gui.scrollFrame:GetVerticalScroll()
+    local maxScroll = gui.scrollContent:GetHeight() - gui.scrollFrame:GetHeight()
+    if maxScroll < 0 then maxScroll = 0 end
+    
+    local delta = arg1 or 0
+    local newScroll = scroll - (delta * 25) -- 25px per scroll step (one row)
+    
+    if newScroll < 0 then newScroll = 0 end
+    if newScroll > maxScroll then newScroll = maxScroll end
+    
+    gui.scrollFrame:SetVerticalScroll(newScroll)
+  end)
 
   gui:Hide()
   table.insert(UISpecialFrames, "sAGUI")
@@ -189,12 +216,18 @@ function sA:RefreshAuraList()
 
   if not simpleAuras or not simpleAuras.auras then return end
 
+  local totalAuras = table.getn(simpleAuras.auras)
+  
+  -- Update scroll content height based on number of auras
+  local contentHeight = totalAuras * 25 + 5
+  gui.scrollContent:SetHeight(contentHeight)
+
   for i, aura in ipairs(simpleAuras.auras) do
     local id = i
-    local row = CreateFrame("Button", nil, gui)
+    local row = CreateFrame("Button", nil, gui.scrollContent)
     row:SetWidth(260)
     row:SetHeight(20)
-    row:SetPoint("TOPLEFT", 20, -30 - (id - 1) * 25)
+    row:SetPoint("TOPLEFT", 0, -(id - 1) * 25)
     row:SetFrameStrata("HIGH")
     sA:SkinFrame(row, {0.2, 0.2, 0.2, 1})
 
@@ -212,7 +245,7 @@ function sA:RefreshAuraList()
       row:SetClampedToScreen(true)
     end)
 
-    -- drag stop: compute drop index using cursor Y and gui top, then reorder table
+    -- drag stop: compute drop index using cursor Y and scroll content, then reorder table
     row:SetScript("OnDragStop", function()
       row:StopMovingOrSizing()
       row:SetFrameStrata("HIGH")
@@ -222,17 +255,20 @@ function sA:RefreshAuraList()
       local scale = row:GetEffectiveScale() or gui:GetEffectiveScale() or 1
       cursorY = cursorY / scale
 
-      local guiTop = gui:GetTop()
-      if not guiTop then
+      local contentTop = gui.scrollContent:GetTop()
+      if not contentTop then
         sA:RefreshAuraList()
         return
       end
 
-      -- relative offset from gui top to cursor
-      local offsetFromTop = guiTop - cursorY
+      -- Get current scroll position
+      local scrollOffset = gui.scrollFrame:GetVerticalScroll()
+      
+      -- relative offset from content top to cursor (including scroll)
+      local offsetFromTop = (contentTop - cursorY) + scrollOffset
 
-      -- rows start 30 px below gui top, spacing 25 px per row; compute target index
-      local targetIndex = math.floor((offsetFromTop - 30) / 25) + 1
+      -- rows have spacing 25 px per row; compute target index
+      local targetIndex = math.floor(offsetFromTop / 25) + 1
 
       -- clamp
       local total = table.getn(simpleAuras.auras)
@@ -365,6 +401,7 @@ function sA:SaveAura(id)
   local data = simpleAuras.auras[id]
   data.name            = ed.name:GetText()
   data.enabled         = ed.enabled.value
+  data.layer           = tonumber(ed.layer:GetText()) or 0
   if sA.SuperWoW then
 	data.myCast          = ed.myCast.value
   end
@@ -376,12 +413,15 @@ function sA:SaveAura(id)
   data.ypos            = tonumber(ed.y:GetText())
   data.duration        = ed.duration.value
   data.stacks          = ed.stacks.value
+  data.durationSize    = tonumber(ed.durationSize:GetText()) or 20
+  data.stacksSize      = tonumber(ed.stacksSize:GetText()) or 14
   data.lowduration     = ed.lowduration.value
   data.lowdurationvalue= tonumber(ed.lowdurationvalue:GetText())
   data.lowdurationcolor= ed.lowdurationcolor
   data.type            = ed.typeButton.text:GetText()
   data.unit            = ed.unitButton.text:GetText()
   data.showCD          = ed.showCD.text:GetText()
+  data.equipped        = ed.equipped.value
   data.inCombat        = ed.inCombat.value
   data.outCombat       = ed.outCombat.value
   data.inRaid          = ed.inRaid.value
@@ -390,11 +430,14 @@ function sA:SaveAura(id)
   data.dual            = ed.dual.value
 
   ed.name:ClearFocus()
+  ed.layer:ClearFocus()
   ed.texturePath:ClearFocus()
   ed.scale:ClearFocus()
   ed.x:ClearFocus()
   ed.y:ClearFocus()
   ed.lowdurationvalue:ClearFocus()
+  ed.durationSize:ClearFocus()
+  ed.stacksSize:ClearFocus()
 
   if sA.TestAura then sA.TestAura:Hide() end
   if sA.TestAuraDual then sA.TestAuraDual:Hide() end
@@ -412,7 +455,7 @@ function sA:AddAura(copyId)
   if copyId and simpleAuras.auras[copyId] then
     simpleAuras.auras[newId] = deepCopy(simpleAuras.auras[copyId])
   else
-    simpleAuras.auras[newId] = {["enabled"]=1,["myCast"]=1,["name"]="",["auracolor"]={[1]=1,[2]=1,[3]=1,[4]=1},["autodetect"]=0,["texture"]="Interface\\Icons\\INV_Misc_QuestionMark",["scale"]=1,["xpos"]=0,["ypos"]=0,["duration"]=0,["stacks"]=0,["type"]="Buff",["unit"]="Player",["showCD"]="Always",["lowduration"]=0,["lowdurationcolor"]={[1]=1,[2]=0,[3]=0,[4]=1},["lowdurationvalue"]=5,["inCombat"]=1,["outCombat"]=1,["inParty"]=0,["inRaid"]=0,["invert"]=0,["dual"]=0}
+    simpleAuras.auras[newId] = {["enabled"]=1,["layer"]=0,["myCast"]=1,["name"]="",["auracolor"]={[1]=1,[2]=1,[3]=1,[4]=1},["autodetect"]=0,["texture"]="Interface\\Icons\\INV_Misc_QuestionMark",["scale"]=1,["xpos"]=0,["ypos"]=0,["duration"]=0,["stacks"]=0,["durationSize"]=20,["stacksSize"]=14,["type"]="Buff",["unit"]="Player",["showCD"]="Always",["equipped"]=0,["lowduration"]=0,["lowdurationcolor"]={[1]=1,[2]=0,[3]=0,[4]=1},["lowdurationvalue"]=5,["inCombat"]=1,["outCombat"]=1,["inParty"]=0,["inRaid"]=0,["invert"]=0,["dual"]=0}
   end
   if gui.editor and gui.editor:IsShown() then
     gui.editor:Hide()
@@ -472,12 +515,31 @@ function sA:EditAura(id)
     ed.enabledLabel:SetPoint("LEFT", ed.enabled, "RIGHT", 5, 0)
     ed.enabledLabel:SetText("Enabled")
 
+    -- Layer input (frame stacking order)
+    ed.layerLabel = ed:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    ed.layerLabel:SetPoint("LEFT", ed.enabledLabel, "RIGHT", 15, 0)
+    ed.layerLabel:SetText("Layer:")
+    
+    ed.layer = CreateFrame("EditBox", nil, ed)
+    ed.layer:SetPoint("LEFT", ed.layerLabel, "RIGHT", 5, 0)
+    ed.layer:SetWidth(30)
+    ed.layer:SetHeight(20)
+    ed.layer:SetJustifyH("CENTER")
+    ed.layer:SetMultiLine(false)
+    ed.layer:SetAutoFocus(false)
+    ed.layer:SetFontObject(GameFontHighlightSmall)
+    ed.layer:SetTextColor(1,1,1)
+    ed.layer:SetBackdrop({ bgFile = "Interface\\Buttons\\WHITE8x8", edgeFile = "Interface\\Buttons\\WHITE8x8", edgeSize = 1 })
+    ed.layer:SetBackdropColor(0.1,0.1,0.1,1)
+    ed.layer:SetBackdropBorderColor(0,0,0,1)
+    ed.layer:SetScript("OnEnterPressed", function() sA:SaveAura(id) end)
+
 	if sA.SuperWoW then
 		-- MyCast Checkbox
 		ed.myCast = CreateFrame("Button", nil, ed)
 		ed.myCast:SetWidth(16)
 		ed.myCast:SetHeight(16)
-		ed.myCast:SetPoint("LEFT", ed.enabledLabel, "RIGHT", 95, 0)
+		ed.myCast:SetPoint("LEFT", ed.layer, "RIGHT", 10, 0)
 		sA:SkinFrame(ed.myCast, {0.15,0.15,0.15,1})
 		ed.myCast:SetScript("OnEnter", function() ed.myCast:SetBackdropColor(0.5,0.5,0.5,1) end)
 		ed.myCast:SetScript("OnLeave", function() ed.myCast:SetBackdropColor(0.15,0.15,0.15,1) end)
@@ -689,11 +751,47 @@ function sA:EditAura(id)
     ed.stacksLabel:SetPoint("LEFT", ed.stacks, "RIGHT", 5, 0)
     ed.stacksLabel:SetText("Show Stacks")
 
+    -- Duration size input
+    ed.durationSizeLabel = ed:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    ed.durationSizeLabel:SetPoint("TOPLEFT", ed.duration, "BOTTOMLEFT", 0, -15)
+    ed.durationSizeLabel:SetText("Duration Size:")
+    ed.durationSize = CreateFrame("EditBox", nil, ed)
+    ed.durationSize:SetPoint("LEFT", ed.durationSizeLabel, "RIGHT", 5, 0)
+    ed.durationSize:SetWidth(40)
+    ed.durationSize:SetHeight(20)
+    ed.durationSize:SetJustifyH("CENTER")
+    ed.durationSize:SetMultiLine(false)
+    ed.durationSize:SetAutoFocus(false)
+    ed.durationSize:SetFontObject(GameFontHighlightSmall)
+    ed.durationSize:SetTextColor(1,1,1)
+    ed.durationSize:SetBackdrop({ bgFile = "Interface\\Buttons\\WHITE8x8", edgeFile = "Interface\\Buttons\\WHITE8x8", edgeSize = 1 })
+    ed.durationSize:SetBackdropColor(0.1,0.1,0.1,1)
+    ed.durationSize:SetBackdropBorderColor(0,0,0,1)
+    ed.durationSize:SetScript("OnEnterPressed", function() sA:SaveAura(id) end)
+
+    -- Stacks size input
+    ed.stacksSizeLabel = ed:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    ed.stacksSizeLabel:SetPoint("LEFT", ed.durationSize, "RIGHT", 30, 0)
+    ed.stacksSizeLabel:SetText("Stacks Size:")
+    ed.stacksSize = CreateFrame("EditBox", nil, ed)
+    ed.stacksSize:SetPoint("LEFT", ed.stacksSizeLabel, "RIGHT", 5, 0)
+    ed.stacksSize:SetWidth(40)
+    ed.stacksSize:SetHeight(20)
+    ed.stacksSize:SetJustifyH("CENTER")
+    ed.stacksSize:SetMultiLine(false)
+    ed.stacksSize:SetAutoFocus(false)
+    ed.stacksSize:SetFontObject(GameFontHighlightSmall)
+    ed.stacksSize:SetTextColor(1,1,1)
+    ed.stacksSize:SetBackdrop({ bgFile = "Interface\\Buttons\\WHITE8x8", edgeFile = "Interface\\Buttons\\WHITE8x8", edgeSize = 1 })
+    ed.stacksSize:SetBackdropColor(0.1,0.1,0.1,1)
+    ed.stacksSize:SetBackdropBorderColor(0,0,0,1)
+    ed.stacksSize:SetScript("OnEnterPressed", function() sA:SaveAura(id) end)
+
     -- Conditions (unit / type)
     local linetwo = ed:CreateTexture(nil, "OVERLAY")
     linetwo:SetTexture("Interface\\Buttons\\WHITE8x8")
     linetwo:SetVertexColor(1, 0.8, 0.06, 1)
-    linetwo:SetPoint("TOPLEFT", ed.duration, "BOTTOMLEFT", 0, -15)
+    linetwo:SetPoint("TOPLEFT", ed.durationSizeLabel, "BOTTOMLEFT", 0, -15)
     linetwo:SetWidth(275)
     linetwo:SetHeight(1)
 
@@ -722,7 +820,7 @@ function sA:EditAura(id)
         menu:SetFrameStrata("DIALOG")
         menu:SetFrameLevel(10)
         menu:SetWidth(80)
-        menu:SetHeight(40)
+        menu:SetHeight(100)
         sA:SkinFrame(menu, {0.15,0.15,0.15,1})
         menu:Hide()
         ed.typeButton.menu = menu
@@ -747,6 +845,8 @@ function sA:EditAura(id)
         makeChoice("Buff", 1)
         makeChoice("Debuff", 2)
         makeChoice("Cooldown", 3)
+        makeChoice("Reactive", 4)
+        makeChoice("Poison", 5)
       end
       local menu = ed.typeButton.menu
       if menu:IsVisible() then menu:Hide() else menu:Show() end
@@ -793,19 +893,63 @@ function sA:EditAura(id)
 			menu:Hide()
 			sA:SaveAura(id)
 		  end)
+		  return b
 		end
-		makeChoice("Player", 1)
-		makeChoice("Target", 2)
+		
+		-- Clear existing choices if menu already exists
+		if menu.choices then
+		  for _, btn in ipairs(menu.choices) do
+			btn:Hide()
+		  end
+		end
+		menu.choices = {}
+		
+		-- Add choices based on aura type
+		local currentAura = simpleAuras.auras[id]
+		if currentAura and currentAura.type == "Poison" then
+		  menu:SetHeight(40)
+		  table.insert(menu.choices, makeChoice("MH", 1))
+		  table.insert(menu.choices, makeChoice("OH", 2))
+		else
+		  menu:SetHeight(40)
+		  table.insert(menu.choices, makeChoice("Player", 1))
+		  table.insert(menu.choices, makeChoice("Target", 2))
+		end
 	  end
 	  local menu = ed.unitButton.menu
 	  if menu:IsVisible() then menu:Hide() else menu:Show() end
 	end)
 	
-	-- Cooldown option
+	-- Equipped checkbox (for Cooldown items like trinkets) - between Type and Always
+	ed.equipped = CreateFrame("Button", nil, ed)
+	ed.equipped:SetWidth(16)
+	ed.equipped:SetHeight(16)
+	ed.equipped:SetPoint("LEFT", ed.typeButton, "RIGHT", 10, 0)
+	sA:SkinFrame(ed.equipped, {0.15,0.15,0.15,1})
+	ed.equipped:SetScript("OnEnter", function() ed.equipped:SetBackdropColor(0.5,0.5,0.5,1) end)
+	ed.equipped:SetScript("OnLeave", function() ed.equipped:SetBackdropColor(0.15,0.15,0.15,1) end)
+	ed.equipped.checked = ed.equipped:CreateTexture(nil, "OVERLAY")
+	ed.equipped.checked:SetTexture("Interface\\Buttons\\WHITE8x8")
+	ed.equipped.checked:SetVertexColor(1,0.8,0.06,1)
+	ed.equipped.checked:SetPoint("CENTER", ed.equipped, "CENTER", 0, 0)
+	ed.equipped.checked:SetWidth(7)
+	ed.equipped.checked:SetHeight(7)
+	ed.equipped.value = 0
+	ed.equipped:SetScript("OnClick", function(self)
+	  ed.equipped.value = 1 - (ed.equipped.value or 0)
+	  if ed.equipped.value == 1 then ed.equipped.checked:Show() else ed.equipped.checked:Hide() end
+	  sA:SaveAura(id)
+	end)
+	ed.equippedLabel = ed:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+	ed.equippedLabel:SetPoint("LEFT", ed.equipped, "RIGHT", 5, 0)
+	ed.equippedLabel:SetText("Equipped")
+	ed.equipped:Hide()
+
+	-- Cooldown option (Always/CD/No CD) - after Equipped checkbox
 	ed.showCD = CreateFrame("Button", nil, ed)
 	ed.showCD:SetWidth(80)
 	ed.showCD:SetHeight(20)
-	ed.showCD:SetPoint("LEFT", ed.typeButton, "RIGHT", 77, 0)
+	ed.showCD:SetPoint("LEFT", ed.equippedLabel, "RIGHT", 15, 0)
 	sA:SkinFrame(ed.showCD, {0.2,0.2,0.2,1})
 	ed.showCD.text = ed.showCD:CreateFontString(nil, "OVERLAY", "GameFontNormal")
 	ed.showCD.text:SetPoint("CENTER", ed.showCD, "CENTER", 0, 0)
@@ -1056,6 +1200,44 @@ function sA:EditAura(id)
 		ed.dual:Hide()
 		ed.dualLabel:Hide()
 		ed.showCD:Show()
+		ed.equipped:Show()
+		ed.equippedLabel:Show()
+	elseif aura.type == "Reactive" then
+		ed.unitLabel:Hide()
+		ed.unitButton:Hide()
+		ed.invert:Hide()
+		ed.invertLabel:Hide()
+		ed.dual:Hide()
+		ed.dualLabel:Hide()
+		ed.showCD:Hide()
+		ed.equipped:Hide()
+		ed.equippedLabel:Hide()
+	elseif aura.type == "Poison" then
+		-- Poison: show Unit dropdown (MH/OH), hide some options
+		if ed.unitLabel then ed.unitLabel:Show() end
+		if ed.unitButton then ed.unitButton:Show() end
+		ed.invert:Hide()
+		ed.invertLabel:Hide()
+		ed.dual:Hide()
+		ed.dualLabel:Hide()
+		ed.showCD:Hide()
+		ed.equipped:Hide()
+		ed.equippedLabel:Hide()
+		-- Rebuild menu for Poison type
+		if ed.unitButton.menu then
+		  ed.unitButton.menu = nil
+		end
+	else
+		-- Buff/Debuff: show all options
+		if ed.unitLabel then ed.unitLabel:Show() end
+		if ed.unitButton then ed.unitButton:Show() end
+		ed.invert:Show()
+		ed.invertLabel:Show()
+		ed.dual:Show()
+		ed.dualLabel:Show()
+		ed.showCD:Hide()
+		ed.equipped:Hide()
+		ed.equippedLabel:Hide()
 	end
 
     -- Delete / Close / Copy buttons
@@ -1111,6 +1293,7 @@ function sA:EditAura(id)
   ed.title:SetText("[" .. tostring(id) .. "] " .. (aura.name ~= "" and aura.name or "<unnamed>"))
   ed.enabled.value = aura.enabled or 1
   if ed.enabled.value == 1 then ed.enabled.checked:Show() else ed.enabled.checked:Hide() end
+  ed.layer:SetText(aura.layer or 0)
   if ed.myCast then
 	  ed.myCast.value = aura.myCast or 0
 	  if ed.myCast.value == 1 then ed.myCast.checked:Show() else ed.myCast.checked:Hide() end
@@ -1130,9 +1313,11 @@ function sA:EditAura(id)
 
   ed.duration.value = aura.duration or 0
   if ed.duration.value == 1 then ed.duration.checked:Show() else ed.duration.checked:Hide() end
+  ed.durationSize:SetText(aura.durationSize or 20)
 
   ed.stacks.value = aura.stacks or 0
   if ed.stacks.value == 1 then ed.stacks.checked:Show() else ed.stacks.checked:Hide() end
+  ed.stacksSize:SetText(aura.stacksSize or 14)
 
   ed.lowduration.value = aura.lowduration or 0
   if ed.lowduration.value == 1 then ed.lowduration.checked:Show() else ed.lowduration.checked:Hide() end
@@ -1147,6 +1332,8 @@ function sA:EditAura(id)
   if ed.showCD then
 	ed.showCD.text:SetText(aura.showCD or "Always")
   end
+  ed.equipped.value = aura.equipped or 0
+  if ed.equipped.value == 1 then ed.equipped.checked:Show() else ed.equipped.checked:Hide() end
   ed.inCombat.value = aura.inCombat or 0
   if ed.inCombat.value == 1 then ed.inCombat.checked:Show() else ed.inCombat.checked:Hide() end
   ed.outCombat.value = aura.outCombat or 0
@@ -1168,8 +1355,34 @@ function sA:EditAura(id)
   sA.TestAura:SetHeight(48*(aura.scale or 1))
   sA.TestAura.texture:SetTexture(aura.texture)
   sA.TestAura.texture:SetVertexColor(unpack(aura.auracolor or {1,1,1,1}))
-  if aura.duration == 1 then sA.TestAura.durationtext:SetText("60") sA.TestAura.durationtext:SetFont("Fonts\\FRIZQT__.TTF", (20*aura.scale), "OUTLINE") else sA.TestAura.durationtext:SetText("") end
-  if aura.stacks == 1 then sA.TestAura.stackstext:SetText("20") sA.TestAura.stackstext:SetFont("Fonts\\FRIZQT__.TTF", (14*aura.scale), "OUTLINE") else sA.TestAura.stackstext:SetText("") end
+  -- Position duration and stacks based on settings
+  if aura.duration == 1 and aura.stacks == 1 then
+    -- Both enabled: move duration up, stacks down
+    sA.TestAura.durationtext:SetPoint("CENTER", sA.TestAura, "CENTER", 0, 8)
+    sA.TestAura.stackstext:SetPoint("CENTER", sA.TestAura, "CENTER", 0, -8)
+    local durationFontSize = (aura.durationSize or 20) * (aura.scale or 1)
+    sA.TestAura.durationtext:SetText("60") 
+    sA.TestAura.durationtext:SetFont("Fonts\\FRIZQT__.TTF", durationFontSize, "OUTLINE") 
+  elseif aura.duration == 1 then
+    -- Only duration enabled: center duration
+    sA.TestAura.durationtext:SetPoint("CENTER", sA.TestAura, "CENTER", 0, 0)
+    sA.TestAura.stackstext:SetPoint("CENTER", sA.TestAura, "CENTER", 0, 0)
+    local durationFontSize = (aura.durationSize or 20) * (aura.scale or 1)
+    sA.TestAura.durationtext:SetText("60") 
+    sA.TestAura.durationtext:SetFont("Fonts\\FRIZQT__.TTF", durationFontSize, "OUTLINE") 
+  else
+    -- Duration disabled: center stacks (if enabled)
+    sA.TestAura.durationtext:SetPoint("CENTER", sA.TestAura, "CENTER", 0, 0)
+    sA.TestAura.stackstext:SetPoint("CENTER", sA.TestAura, "CENTER", 0, 0)
+    sA.TestAura.durationtext:SetText("") 
+  end
+  if aura.stacks == 1 then 
+    local stacksFontSize = (aura.stacksSize or 14) * (aura.scale or 1)
+    sA.TestAura.stackstext:SetText("20") 
+    sA.TestAura.stackstext:SetFont("Fonts\\FRIZQT__.TTF", stacksFontSize, "OUTLINE") 
+  else 
+    sA.TestAura.stackstext:SetText("") 
+  end
 	  
 	  local _, _, _, durationalpha = unpack(aura.auracolor or {1,1,1,1})
 	  local durationcolor = {1.0, 0.82, 0.0, durationalpha}
@@ -1189,8 +1402,34 @@ function sA:EditAura(id)
     sA.TestAuraDual.texture:SetTexture(aura.texture)
     sA.TestAuraDual.texture:SetTexCoord(1,0,0,1)
     sA.TestAuraDual.texture:SetVertexColor(unpack(aura.auracolor or {1,1,1,1}))
-    if aura.duration == 1 then sA.TestAuraDual.durationtext:SetText("60") sA.TestAuraDual.durationtext:SetFont("Fonts\\FRIZQT__.TTF", (20*aura.scale), "OUTLINE") else sA.TestAuraDual.durationtext:SetText("") end
-    if aura.stacks == 1 then sA.TestAuraDual.stackstext:SetText("20") sA.TestAuraDual.stackstext:SetFont("Fonts\\FRIZQT__.TTF", (14*aura.scale), "OUTLINE") else sA.TestAuraDual.stackstext:SetText("") end
+    -- Position duration and stacks based on settings (same as main frame)
+    if aura.duration == 1 and aura.stacks == 1 then
+      -- Both enabled: move duration up, stacks down
+      sA.TestAuraDual.durationtext:SetPoint("CENTER", sA.TestAuraDual, "CENTER", 0, 8)
+      sA.TestAuraDual.stackstext:SetPoint("CENTER", sA.TestAuraDual, "CENTER", 0, -8)
+      local durationFontSize = (aura.durationSize or 20) * aura.scale
+      sA.TestAuraDual.durationtext:SetText("60") 
+      sA.TestAuraDual.durationtext:SetFont("Fonts\\FRIZQT__.TTF", durationFontSize, "OUTLINE") 
+    elseif aura.duration == 1 then
+      -- Only duration enabled: center duration
+      sA.TestAuraDual.durationtext:SetPoint("CENTER", sA.TestAuraDual, "CENTER", 0, 0)
+      sA.TestAuraDual.stackstext:SetPoint("CENTER", sA.TestAuraDual, "CENTER", 0, 0)
+      local durationFontSize = (aura.durationSize or 20) * aura.scale
+      sA.TestAuraDual.durationtext:SetText("60") 
+      sA.TestAuraDual.durationtext:SetFont("Fonts\\FRIZQT__.TTF", durationFontSize, "OUTLINE") 
+    else
+      -- Duration disabled: center stacks (if enabled)
+      sA.TestAuraDual.durationtext:SetPoint("CENTER", sA.TestAuraDual, "CENTER", 0, 0)
+      sA.TestAuraDual.stackstext:SetPoint("CENTER", sA.TestAuraDual, "CENTER", 0, 0)
+      sA.TestAuraDual.durationtext:SetText("") 
+    end
+    if aura.stacks == 1 then 
+      local stacksFontSize = (aura.stacksSize or 14) * aura.scale
+      sA.TestAuraDual.stackstext:SetText("20") 
+      sA.TestAuraDual.stackstext:SetFont("Fonts\\FRIZQT__.TTF", stacksFontSize, "OUTLINE") 
+    else 
+      sA.TestAuraDual.stackstext:SetText("") 
+    end
     sA.TestAuraDual:Show()
   else
     sA.TestAuraDual:Hide()
